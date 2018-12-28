@@ -11,13 +11,13 @@ VADER (Valence Aware Dictionary and sEntiment Reasoner) is a lexicon and rule-ba
 
 Install Python and the packages that is required to run this script. If you use Anaconda, most of these packages should already be installed. You will likely need to install the vaderSentiment package. Do so via the command prompt: 
 
-```
+```python
 pip install vaderSentiment
 ```
 
 ## Script
 
-```
+```python
 import pandas as pd
 import tweepy
 import time
@@ -30,7 +30,7 @@ The following are imported:
 * time - while loop
 * OrderedDict - ordering JSON files
 * json_normalize - normalizing JSON files
-```
+```python
 consumer_key = ""
 consumer_secret = ""
 access_key = ""
@@ -41,7 +41,7 @@ auth.set_access_token(access_key, access_secret)
 api = tweepy.API(auth, parser = tweepy.parsers.JSONParser())
 ```
 Standard Twitter authorisation. Create your own app and obtain your own keys via [Twitter apps](https://developer.twitter.com/en/apps).
-```
+```python
 searchterm = input('Enter your search term: ')
 searchquery = '"' + searchterm + '" -filter:retweets -filter:media -filter:images -filter:links'
 data = api.search(q = searchquery, lang = 'en', count = 100, result_type = 'mixed')
@@ -50,7 +50,7 @@ data_all = list(data.values())[0]
 ```
 Program prompts for search term. Search term is appended to full search query filtering out retweets, media, images and links. 
 Twitter API returns results in a JSON file. JSON file is ordered and tweets are extracted to a separate list. 
-```
+```python
 maxtweets = 1000
 
 while (len(data_all) < maxtweets):
@@ -64,7 +64,7 @@ while (len(data_all) < maxtweets):
 df = pd.DataFrame.from_dict(json_normalize(data_all), orient='columns')
 ```
 Twitter API limits 100 tweets per call. A target number of tweets to mine is set (i.e. 1000) and the while loop repeatedly calls the API referencing the last tweet ID and appends the list 100 tweets at a time until the targeted number of tweets is met. The resulting list is converted into a dataframe for further manipulation. 
-```
+```python
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 analyzer = SentimentIntensityAnalyzer()
 
@@ -85,7 +85,7 @@ def sentiment_score_neu(sentence):
     return score['neu']
 ```
 VADER model is imported and separate functions are defined to return compound, positive, negative and neutral scores. 
-```
+```python
 df2 = pd.DataFrame()
 df2['id'] = df['id'].values
 df2['created_at'] = df['created_at'].values
