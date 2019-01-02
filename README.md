@@ -21,6 +21,7 @@ pip install vaderSentiment
 import pandas as pd
 import tweepy
 import time
+import sys
 from collections import OrderedDict
 from pandas.io.json import json_normalize
 ```
@@ -28,45 +29,60 @@ The following are imported:
 * pandas - dataframe manipulation
 * tweepy - Twitter APIs
 * time - while loop
+* sys - kill program
 * OrderedDict - ordering JSON files
 * json_normalize - normalizing JSON files
 ```python
-try:
-    consumer_key = ""
-    consumer_secret = ""
-    access_key = ""
-    access_secret = ""
+consumer_key = ""
+consumer_secret = ""
+access_key = ""
+access_secret = ""
+    
+#Twitter authorisation
+def initialize():
     auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
     auth.set_access_token(access_key, access_secret)
-    
-except:
-    print('Error. Authentication failed.')
+    api = tweepy.API(auth, parser = tweepy.parsers.JSONParser())
+    return api
+
+api = initialize()
 ```
 Standard Twitter authorisation. Create your own app and obtain your own keys via [Twitter apps](https://developer.twitter.com/en/apps).
 ```python
-api = tweepy.API(auth, parser = tweepy.parsers.JSONParser())
 searchterm = input('Enter your search term: ')
 searchquery = '"' + searchterm + '" -filter:retweets -filter:media -filter:images -filter:links'
 data = api.search(q = searchquery, lang = 'en', count = 100, result_type = 'mixed')
 data = OrderedDict(data)
 data_all = list(data.values())[0]
-```
-Program prompts for search term. Search term is appended to full search query filtering out retweets, media, images and links. 
-Twitter API returns results in a JSON file. JSON file is ordered and tweets are extracted to a separate list. 
-```python
-maxtweets = 1000
 
-while (len(data_all) < maxtweets):
-    time.sleep(5)
+max_tweets = input('Enter number of requested tweets (recommended less than 1,000): ')
+max_tweets = int(max_tweets)
+
+if data_all == []:
+    print('\n No results found. Program will terminate.')
+    sys.exit()
+```
+Program prompts user for search term and appends to searchquery (filtering out retweets, media, images and links) and requested amount of tweets (max_tweets). It performs first 100 searches. Twitter API limits 100 tweets per call, so a while loop has to be set up later to repeatedly call this API. Exception handling in place in the event of no tweets.  
+```python
+done = False
+
+while not done:
     last_id = data_all[-1]['id']
-    data = api.search(q = searchquery, lang = 'en', count = 100, result_type = 'mixed', max_id = last_id)
+    data = api.search(q = searchquery, lang = 'en', count = 100, result_type = 'mixed', max_id = last_id)      
     data = OrderedDict(data)
     data_all_temp = list(data.values())[0]
     data_all += data_all_temp
+    time.sleep(1)
+    
+    if data_all_temp == []:
+        done = True
+        
+    if len(data_all) >= max_tweets:
+        done = True
 
 df = pd.DataFrame.from_dict(json_normalize(data_all), orient='columns')
 ```
-Twitter API limits 100 tweets per call. A target number of tweets to mine is set (i.e. 1000) and the while loop repeatedly calls the API referencing the last tweet ID and appends the list 100 tweets at a time until the targeted number of tweets is met. The resulting list is converted into a dataframe for further manipulation. 
+While loop repeatedly calls the API referencing the last tweet ID and appends the list 100 tweets at a time until the requested number of tweets is met. Results are returned in a JSON file. JSON file is ordered and tweets are extracted to a separate list. The resulting list is converted into a dataframe for further manipulation.
 ```python
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 analyzer = SentimentIntensityAnalyzer()
@@ -87,25 +103,28 @@ def sentiment_score_neu(sentence):
     score = analyzer.polarity_scores(sentence)
     return score['neu']
 ```
-VADER model is imported and separate functions are defined to return compound, positive, negative and neutral scores. 
+Import VADER model and using its methods, define separate functions to return compound, positive, negative and neutral scores. 
 ```python
 df2 = pd.DataFrame()
 df2['id'] = df['id'].values
 df2['created_at'] = df['created_at'].values
+df2['user.screen_name'] = df['user.screen_name'].values
 df2['tweet'] = df['text'].values
 df2['vs_compound'] = df.apply(lambda row: sentiment_score_compound(row['text']), axis=1)
 df2['vs_pos'] = df.apply(lambda row: sentiment_score_pos(row['text']), axis=1)
 df2['vs_neg'] = df.apply(lambda row: sentiment_score_neg(row['text']), axis=1)
 df2['vs_neu'] = df.apply(lambda row: sentiment_score_neu(row['text']), axis=1)
 
-header = ['id', 'created_at', 'tweet', 'vs_compound', 'vs_pos', 'vs_neg', 'vs_neu']
+header = ['id', 'created_at', 'user.screen_name', 'tweet', 'vs_compound', 'vs_pos', 'vs_neg', 'vs_neu']
 timestr = time.strftime("%Y%m%d-%H%M%S")
 df2.to_csv('output-'+timestr+'.csv', columns = header)
+
+print(len(df2), 'tweets found.')
+print('Output saved as output-',timestr,'.csv')
 ```
 Output dataframe (df2) is defined importing desired columns from tweets dataframe (df). Sentiment scores columns are generated applying respective functions to the tweet. Final dataframe is output into a .csv file. 
 
 ### Limitations / Improvements
 1. Twitter public APIs restrict getting of tweets up to a maximum of 7 days. 
-2. Large amount of tweets have geocodes disabled, so it is difficult to mine location-specific tweets. 
-3. While loop does not break if less than maxtweets are mined. 
-4. Introducing regex to clean tweet text by removing special characters
+2. Majority of tweets have geocodes disabled, so it is difficult to mine location-specific tweets. 
+3. Introducing regex to clean tweet text by removing special characters
