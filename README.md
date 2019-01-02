@@ -31,17 +31,20 @@ The following are imported:
 * OrderedDict - ordering JSON files
 * json_normalize - normalizing JSON files
 ```python
-consumer_key = ""
-consumer_secret = ""
-access_key = ""
-access_secret = ""
-
-auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
-auth.set_access_token(access_key, access_secret)
-api = tweepy.API(auth, parser = tweepy.parsers.JSONParser())
+try:
+    consumer_key = ""
+    consumer_secret = ""
+    access_key = ""
+    access_secret = ""
+    auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
+    auth.set_access_token(access_key, access_secret)
+    
+except:
+    print('Error. Authentication failed.')
 ```
 Standard Twitter authorisation. Create your own app and obtain your own keys via [Twitter apps](https://developer.twitter.com/en/apps).
 ```python
+api = tweepy.API(auth, parser = tweepy.parsers.JSONParser())
 searchterm = input('Enter your search term: ')
 searchquery = '"' + searchterm + '" -filter:retweets -filter:media -filter:images -filter:links'
 data = api.search(q = searchquery, lang = 'en', count = 100, result_type = 'mixed')
@@ -101,7 +104,8 @@ df2.to_csv('output-'+timestr+'.csv', columns = header)
 ```
 Output dataframe (df2) is defined importing desired columns from tweets dataframe (df). Sentiment scores columns are generated applying respective functions to the tweet. Final dataframe is output into a .csv file. 
 
-### Limitations
+### Limitations / Improvements
 1. Twitter public APIs restrict getting of tweets up to a maximum of 7 days. 
 2. Large amount of tweets have geocodes disabled, so it is difficult to mine location-specific tweets. 
 3. While loop does not break if less than maxtweets are mined. 
+4. Introducing regex to clean tweet text by removing special characters
