@@ -124,7 +124,9 @@ print('Output saved as output-',timestr,'.csv')
 ```
 Output dataframe (df2) is defined importing desired columns from tweets dataframe (df). Sentiment scores columns are generated applying respective functions to the tweet. Final dataframe is output into a .csv file. 
 
-### Limitations / Improvements
+### Limitations
 1. Twitter public APIs restrict getting of tweets up to a maximum of 7 days. 
-2. Majority of tweets have geocodes disabled, so it is difficult to mine location-specific tweets. 
-3. Introducing regex to clean tweet text by removing special characters
+2. More than 90% of tweets have geocodes disabled, so mining location-specific tweets may yield less meaningful results. 
+
+### Improvements
+1. Introducing regex to clean tweet text by removing special characters. 
