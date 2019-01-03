@@ -1,35 +1,52 @@
 import pandas as pd
 import tweepy
 import time
+import sys
 from collections import OrderedDict
 from pandas.io.json import json_normalize
 
-#Twitter authorisations
-consumer_key = "INSERT KEY"
-consumer_secret = "INSERT KEY"
-access_key = "INSERT KEY"
-access_secret = "INSERT KEY"
+consumer_key = ""
+consumer_secret = ""
+access_key = ""
+access_secret = ""
+    
+#Twitter authorisation
+def initialize():
+    auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
+    auth.set_access_token(access_key, access_secret)
+    api = tweepy.API(auth, parser = tweepy.parsers.JSONParser())
+    return api
 
-auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
-auth.set_access_token(access_key, access_secret)
-api = tweepy.API(auth, parser = tweepy.parsers.JSONParser())
+api = initialize()
 
+print('\nThis program gets tweets using Twitter public APIs and passes them through the VADER sentiment analysis model - a model geared towards social media sentiment analysis. Results are generated in a .csv file output for further analysis.')    
 searchterm = input('Enter your search term: ')
 searchquery = '"' + searchterm + '" -filter:retweets -filter:media -filter:images -filter:links'
 data = api.search(q = searchquery, lang = 'en', count = 100, result_type = 'mixed')
 data = OrderedDict(data)
 data_all = list(data.values())[0]
+max_tweets = input('Enter number of requested tweets (recommended less than 1,000): ')
+max_tweets = int(max_tweets)
 
-maxtweets = 1000
+if data_all == []:
+    print('\n No results found. Program will terminate.')
+    sys.exit()
+    
+done = False
 
-#Loops API call until maxtweets is mined as Twitter search API limits 100 tweets per call
-while (len(data_all) < maxtweets):
-    time.sleep(5)
+while not done:
     last_id = data_all[-1]['id']
-    data = api.search(q = searchquery, lang = 'en', count = 100, result_type = 'mixed', max_id = last_id)
+    data = api.search(q = searchquery, lang = 'en', count = 100, result_type = 'mixed', max_id = last_id)      
     data = OrderedDict(data)
     data_all_temp = list(data.values())[0]
     data_all += data_all_temp
+    time.sleep(1)
+    
+    if data_all_temp == []:
+        done = True
+        
+    if len(data_all) >= max_tweets:
+        done = True
 
 df = pd.DataFrame.from_dict(json_normalize(data_all), orient='columns')
 
@@ -55,12 +72,23 @@ def sentiment_score_neu(sentence):
 df2 = pd.DataFrame()
 df2['id'] = df['id'].values
 df2['created_at'] = df['created_at'].values
+df2['user.screen_name'] = df['user.screen_name'].values
 df2['tweet'] = df['text'].values
 df2['vs_compound'] = df.apply(lambda row: sentiment_score_compound(row['text']), axis=1)
 df2['vs_pos'] = df.apply(lambda row: sentiment_score_pos(row['text']), axis=1)
 df2['vs_neg'] = df.apply(lambda row: sentiment_score_neg(row['text']), axis=1)
 df2['vs_neu'] = df.apply(lambda row: sentiment_score_neu(row['text']), axis=1)
 
-header = ['id', 'created_at', 'tweet', 'vs_compound', 'vs_pos', 'vs_neg', 'vs_neu']
+no_pos_tweets = [tweet for index, tweet in enumerate(df2['vs_compound']) if df2['vs_compound'][index] > 0]
+no_neg_tweets = [tweet for index, tweet in enumerate(df2['vs_compound']) if df2['vs_compound'][index] < 0]
+no_neu_tweets = [tweet for index, tweet in enumerate(df2['vs_compound']) if df2['vs_compound'][index] == 0]
+
+print(len(df2), 'tweets found.')
+print('\rPercentage of positive tweets: {:.2f}%'.format(len(no_pos_tweets)*100/len(df2['vs_compound'])))
+print('\rPercentage of negative tweets: {:.2f}%'.format(len(no_neg_tweets)*100/len(df2['vs_compound'])))
+print('\rPercentage of neutral tweets: {:.2f}%'.format(len(no_neu_tweets)*100/len(df2['vs_compound'])))
+
+header = ['id', 'created_at', 'user.screen_name', 'tweet', 'vs_compound', 'vs_pos', 'vs_neg', 'vs_neu']
 timestr = time.strftime("%Y%m%d-%H%M%S")
 df2.to_csv('output-'+timestr+'.csv', columns = header)
+print('\nOutput saved as output-',timestr,'.csv')
