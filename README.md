@@ -49,12 +49,12 @@ api = initialize()
 ```
 Standard Twitter authorisation. Create your own app and obtain your own keys via [Twitter apps](https://developer.twitter.com/en/apps).
 ```python
+print('\nThis program gets tweets using Twitter public APIs and passes them through the VADER sentiment analysis model - a model geared towards social media sentiment analysis. Results are generated in a .csv file output for further analysis.')    
 searchterm = input('Enter your search term: ')
 searchquery = '"' + searchterm + '" -filter:retweets -filter:media -filter:images -filter:links'
 data = api.search(q = searchquery, lang = 'en', count = 100, result_type = 'mixed')
 data = OrderedDict(data)
 data_all = list(data.values())[0]
-
 max_tweets = input('Enter number of requested tweets (recommended less than 1,000): ')
 max_tweets = int(max_tweets)
 
@@ -114,7 +114,25 @@ df2['vs_compound'] = df.apply(lambda row: sentiment_score_compound(row['text']),
 df2['vs_pos'] = df.apply(lambda row: sentiment_score_pos(row['text']), axis=1)
 df2['vs_neg'] = df.apply(lambda row: sentiment_score_neg(row['text']), axis=1)
 df2['vs_neu'] = df.apply(lambda row: sentiment_score_neu(row['text']), axis=1)
+```
+Output dataframe (df2) is defined importing desired columns from tweets dataframe (df). Sentiment scores columns are generated applying respective functions to the tweet.
 
+```python
+no_pos_tweets = [tweet for index, tweet in enumerate(df2['vs_compound']) if df2['vs_compound'][index] > 0]
+no_neg_tweets = [tweet for index, tweet in enumerate(df2['vs_compound']) if df2['vs_compound'][index] < 0]
+no_neu_tweets = [tweet for index, tweet in enumerate(df2['vs_compound']) if df2['vs_compound'][index] == 0]
+```
+Positive / negative / neutral tweets are counted as a % of total tweets fetched. 
+
+```python
+print(len(df2), 'tweets found.')
+print('\rPercentage of positive tweets: {:.2f}%'.format(len(no_pos_tweets)*100/len(df2['vs_compound'])))
+print('\rPercentage of negative tweets: {:.2f}%'.format(len(no_neg_tweets)*100/len(df2['vs_compound'])))
+print('\rPercentage of neutral tweets: {:.2f}%'.format(len(no_neu_tweets)*100/len(df2['vs_compound'])))
+```
+High-level information of tweets fetched are reported.
+
+```
 header = ['id', 'created_at', 'user.screen_name', 'tweet', 'vs_compound', 'vs_pos', 'vs_neg', 'vs_neu']
 timestr = time.strftime("%Y%m%d-%H%M%S")
 df2.to_csv('output-'+timestr+'.csv', columns = header)
@@ -122,11 +140,9 @@ df2.to_csv('output-'+timestr+'.csv', columns = header)
 print(len(df2), 'tweets found.')
 print('Output saved as output-',timestr,'.csv')
 ```
-Output dataframe (df2) is defined importing desired columns from tweets dataframe (df). Sentiment scores columns are generated applying respective functions to the tweet. Final dataframe is output into a .csv file. 
+Final dataframe is output into a .csv file for further analysis. 
 
 ### Limitations
 1. Twitter public APIs restrict getting of tweets up to a maximum of 7 days. 
 2. More than 90% of tweets have geocodes disabled, so mining location-specific tweets may yield less meaningful results. 
-
-### Improvements
-1. Introducing regex to clean tweet text by removing special characters. 
+3. Experimented using regex to clean up tweets. Before-after impact was minimal (~5% of original sentiment results affected).  
