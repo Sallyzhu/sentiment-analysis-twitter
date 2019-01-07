@@ -1,5 +1,10 @@
 # sentiment-analysis-twitter
-This script gets tweets using Twitter public APIs and passes them through the VADER sentiment analysis model - a model geared towards social media sentiment analysis. Results are generated in a .csv file output for further analysis.  
+This script has the following features:
+* Searches tweets using Twitter search API 
+* Supports location-specific search using Twitter's geo search API
+* Passes tweets through the VADER sentiment analysis model
+* Summarises positive, neutral and negative sentiment
+* Generates tweets in a .csv file output for further analysis
 
 ### VADER Sentiment Analysis Model
 
@@ -9,7 +14,7 @@ VADER (Valence Aware Dictionary and sEntiment Reasoner) is a lexicon and rule-ba
 
 ## Prerequisites
 
-Install Python and the packages that is required to run this script. If you use Anaconda, most of these packages should already be installed. You will likely need to install the vaderSentiment package. Do so via the command prompt: 
+Install Python and the packages that is required to run this script. If you use Anaconda, most of these packages should already be installed. You will likely need to install the vaderSentiment package. Do so via your preferred command prompt: 
 
 ```python
 pip install vaderSentiment
@@ -50,9 +55,37 @@ api = initialize()
 Standard Twitter authorisation. Create your own app and obtain your own keys via [Twitter apps](https://developer.twitter.com/en/apps).
 ```python
 print('\nThis program gets tweets using Twitter public APIs and passes them through the VADER sentiment analysis model - a model geared towards social media sentiment analysis. Results are generated in a .csv file output for further analysis.')    
-searchterm = input('Enter your search term: ')
-searchquery = '"' + searchterm + '" -filter:retweets -filter:media -filter:images -filter:links'
-data = api.search(q = searchquery, lang = 'en', count = 100, result_type = 'mixed')
+geo_enabled = input('Run geo-enabled search? (y/n): ').lower().strip()
+
+while geo_enabled not in ('y','n'):
+    print('Invalid input. Please enter y/n: ')
+    geo_enabled = input().lower().strip()
+     
+if geo_enabled[0] == 'y':
+    country = input('Enter your country: ')
+    geocode = api.geo_search(query = country)
+    geocode = OrderedDict(geocode)
+
+    while geocode['result']['places'] == []:
+        print('\n No results found. Please try again.')
+        country = input('Enter your country: ')
+        geocode = api.geo_search(query = country)
+        geocode = OrderedDict(geocode)
+
+    #api.geo_search returns coordinates in 'longitude, latitude' but api.search geocode parameter is defined by 'LATitude, LONGitude'
+    latitude = float(geocode['result']['places'][0]['centroid'][1])
+    longitude = float(geocode['result']['places'][0]['centroid'][0])
+    print('The lat-long coordinates for the country are ', latitude, ' ', longitude)
+    max_range = int(input('Input radius of search in kilometres: '))
+    searchterm = input('Enter your search term: ')
+    searchquery = searchterm + ' -filter:retweets -filter:media -filter:images -filter:links'
+    data = api.search(q = searchquery, geocode = "%f,%f,%dkm" % (latitude, longitude, max_range), lang = 'en', count = 100, result_type = 'mixed')
+
+else:
+    searchterm = input('Enter your search term: ')
+    searchquery = searchterm + ' -filter:retweets -filter:media -filter:images -filter:links'
+    data = api.search(q = searchquery, lang = 'en', count = 100, result_type = 'mixed')
+
 data = OrderedDict(data)
 data_all = list(data.values())[0]
 max_tweets = input('Enter number of requested tweets (recommended less than 1,000): ')
@@ -62,9 +95,19 @@ if data_all == []:
     print('\n No results found. Program will terminate.')
     sys.exit()
 ```
-Program prompts user for search term and appends to searchquery (filtering out retweets, media, images and links) and requested amount of tweets (max_tweets). It performs first 100 searches. Twitter API limits 100 tweets per call, so a while loop has to be set up later to repeatedly call this API. Exception handling in place in the event of no tweets.  
+The above accomplishes the following: 
+* We first ask the user whether a location-specific search should be conducted.
+* If yes, we dig through the response from Twitter's geo_search API to fetch the coordinates of the country. 
+* We also prompt the user to input a radius of search from the coordinate point.
+* We then prompt the user to enter the search term. Retweets, media, images and links are automatically filtered out.
+* We then prompt the user for a requested amount of tweets to fetch. Twitter's standard search API fetch a maximum of 100 tweets per call and limits 180 calls per 15 minutes. This means a maximum amount of 18,000 tweets can be mined per 15 minutes. 
+
+The API then attempts to fetch the first 100 searches. Exception handling is in place in the event of no tweets.  
 ```python
 done = False
+
+if len(data_all) < 100:
+    done = True
 
 while not done:
     last_id = data_all[-1]['id']
@@ -77,12 +120,15 @@ while not done:
     if data_all_temp == []:
         done = True
         
+    if len(data_all_temp) < 100:
+        done = True
+        
     if len(data_all) >= max_tweets:
         done = True
 
 df = pd.DataFrame.from_dict(json_normalize(data_all), orient='columns')
 ```
-While loop repeatedly calls the API referencing the last tweet ID and appends the list 100 tweets at a time until the requested number of tweets is met. Results are returned in a JSON file. JSON file is ordered and tweets are extracted to a separate list. The resulting list is converted into a dataframe for further manipulation.
+We use a while loop with a boolean to repeatedly call the API until the requested number of tweets is met. This method references the last tweet ID and appends the next 100 tweets to the list. Results are returned in a JSON file. JSON file is ordered and tweets are extracted to a separate list. The resulting list is converted into a dataframe for further manipulation.
 ```python
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 analyzer = SentimentIntensityAnalyzer()
@@ -109,6 +155,7 @@ df2 = pd.DataFrame()
 df2['id'] = df['id'].values
 df2['created_at'] = df['created_at'].values
 df2['user.screen_name'] = df['user.screen_name'].values
+df2['place.country'] = df['place.country'].values
 df2['tweet'] = df['text'].values
 df2['vs_compound'] = df.apply(lambda row: sentiment_score_compound(row['text']), axis=1)
 df2['vs_pos'] = df.apply(lambda row: sentiment_score_pos(row['text']), axis=1)
@@ -143,6 +190,6 @@ print('Output saved as output-',timestr,'.csv')
 Final dataframe is output into a .csv file for further analysis. 
 
 ### Limitations
-1. Twitter public APIs restrict getting of tweets up to a maximum of 7 days. 
-2. More than 90% of tweets have geocodes disabled, so mining location-specific tweets may yield less meaningful results. 
+1. Twitter standard search API have a maximum look back window of 7 days. 
+2. More than 90% of tweets have geocodes disabled, so searching for location-specific tweets may yield less meaningful results. 
 3. Experimented using regex to clean up tweets. Before-after impact was minimal (~5% of original sentiment results affected).  
