@@ -10,7 +10,6 @@ consumer_secret = ""
 access_key = ""
 access_secret = ""
     
-#Twitter authorisation
 def initialize():
     auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
     auth.set_access_token(access_key, access_secret)
@@ -20,9 +19,37 @@ def initialize():
 api = initialize()
 
 print('\nThis program gets tweets using Twitter public APIs and passes them through the VADER sentiment analysis model - a model geared towards social media sentiment analysis. Results are generated in a .csv file output for further analysis.')    
-searchterm = input('Enter your search term: ')
-searchquery = '"' + searchterm + '" -filter:retweets -filter:media -filter:images -filter:links'
-data = api.search(q = searchquery, lang = 'en', count = 100, result_type = 'mixed')
+geo_enabled = input('Run geo-enabled search? (y/n): ').lower().strip()
+
+while geo_enabled not in ('y','n'):
+    print('Invalid input. Please enter y/n: ')
+    geo_enabled = input().lower().strip()
+     
+if geo_enabled[0] == 'y':
+    country = input('Enter your country: ')
+    geocode = api.geo_search(query = country)
+    geocode = OrderedDict(geocode)
+
+    while geocode['result']['places'] == []:
+        print('\n No results found. Please try again.')
+        country = input('Enter your country: ')
+        geocode = api.geo_search(query = country)
+        geocode = OrderedDict(geocode)
+
+    #api.geo_search returns coordinates in 'longitude, latitude' but api.search geocode parameter is defined by 'LATitude, LONGitude'
+    latitude = float(geocode['result']['places'][0]['centroid'][1])
+    longitude = float(geocode['result']['places'][0]['centroid'][0])
+    print('The lat-long coordinates for the country are ', latitude, ' ', longitude)
+    max_range = int(input('Input radius of search in kilometres: '))
+    searchterm = input('Enter your search term: ')
+    searchquery = searchterm + ' -filter:retweets -filter:media -filter:images -filter:links'
+    data = api.search(q = searchquery, geocode = "%f,%f,%dkm" % (latitude, longitude, max_range), lang = 'en', count = 100, result_type = 'mixed')
+
+else:
+    searchterm = input('Enter your search term: ')
+    searchquery = searchterm + ' -filter:retweets -filter:media -filter:images -filter:links'
+    data = api.search(q = searchquery, lang = 'en', count = 100, result_type = 'mixed')
+
 data = OrderedDict(data)
 data_all = list(data.values())[0]
 max_tweets = input('Enter number of requested tweets (recommended less than 1,000): ')
@@ -34,6 +61,9 @@ if data_all == []:
     
 done = False
 
+if len(data_all) < 100:
+    done = True
+
 while not done:
     last_id = data_all[-1]['id']
     data = api.search(q = searchquery, lang = 'en', count = 100, result_type = 'mixed', max_id = last_id)      
@@ -43,6 +73,9 @@ while not done:
     time.sleep(1)
     
     if data_all_temp == []:
+        done = True
+        
+    if len(data_all_temp) < 100:
         done = True
         
     if len(data_all) >= max_tweets:
@@ -73,6 +106,7 @@ df2 = pd.DataFrame()
 df2['id'] = df['id'].values
 df2['created_at'] = df['created_at'].values
 df2['user.screen_name'] = df['user.screen_name'].values
+df2['place.country'] = df['place.country'].values
 df2['tweet'] = df['text'].values
 df2['vs_compound'] = df.apply(lambda row: sentiment_score_compound(row['text']), axis=1)
 df2['vs_pos'] = df.apply(lambda row: sentiment_score_pos(row['text']), axis=1)
@@ -88,7 +122,7 @@ print('\rPercentage of positive tweets: {:.2f}%'.format(len(no_pos_tweets)*100/l
 print('\rPercentage of negative tweets: {:.2f}%'.format(len(no_neg_tweets)*100/len(df2['vs_compound'])))
 print('\rPercentage of neutral tweets: {:.2f}%'.format(len(no_neu_tweets)*100/len(df2['vs_compound'])))
 
-header = ['id', 'created_at', 'user.screen_name', 'tweet', 'vs_compound', 'vs_pos', 'vs_neg', 'vs_neu']
+header = ['id', 'created_at', 'user.screen_name', 'place.country', 'tweet', 'vs_compound', 'vs_pos', 'vs_neg', 'vs_neu']
 timestr = time.strftime("%Y%m%d-%H%M%S")
 df2.to_csv('output-'+timestr+'.csv', columns = header)
 print('\nOutput saved as output-',timestr,'.csv')
